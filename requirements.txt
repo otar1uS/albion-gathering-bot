@@ -1,1 +1,22 @@
 opencv-python==4.9.0.80
+mss
+numpy
+pyautogui
+torch
+torchvision
+
+# Window capture, one library per platform
+pywin32; sys_platform == "win32"
+pyobjc-framework-Quartz; sys_platform == "darwin"
+
+# Needed by the yolov5 submodule loading the model
+pandas
+Pillow
+psutil
+PyYAML
+requests
+scipy
+seaborn
+matplotlib
+tqdm
+ultralytics

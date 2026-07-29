@@ -18,7 +18,7 @@ class ScreenInformation:
         self.height = height - self.ALBION_HEADER_HEIGHT
 
     def center(self):
-        return (self.width + self.top) / 2, (self.height + self.left) / 2
+        return self.left + self.width / 2, self.top + self.height / 2
 
     def __str__(self):
         return f"Screen located at ({self.left}x, {self.top}y) with size of ({self.width}w, {self.height}h)"

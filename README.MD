@@ -73,9 +73,15 @@ I'd always wonder how to make a object detection model and how to use it in a re
 
 ### 🗺️ Prerequisites
 
-Python 3.8 is required to run the project.
+Python 3.10 or newer is required to run the project.
 
 Albion Online is also required to run the project.
+
+The yolov5 submodule holds the code loading the model, get it with :
+
+```bash
+git submodule update --init --recursive
+```
 
 Create an account on Roboflow and download the dataset in Yolov5 format.
 At this url: https://universe.roboflow.com/albiononline-c8fxi/albiongathering
@@ -87,6 +93,9 @@ Get the data set and put it in the yolov5 folder and run the train set (could us
 ```bash
 python train.py --img 640 --epochs 3 --data coco128.yaml --weights yolov5s.pt
 ```
+
+Rename the trained weights to `best.pt` and put them at the root of the repository,
+next to the `Application` folder.
 
 Testing folder, is a folder that contains my test during development phase.
 
@@ -102,13 +111,65 @@ Before running the project, you need to install the requirements.
 pip install -r requirements.txt
 ```
 
-Start Albion Online and go to the resource you want to farm. Then you can run the project with the following command.
-
-In the Application folder you can find the main.py file. Run it with the following command., With or without the debug flag in the AlbionDetection class.
+Start Albion Online, then start the interface :
 
 ```bash
-python main.py
+python Application/ui.py
 ```
+
+It needs nothing more than Python, tkinter comes with it.
+
+The window tells you whether the game is running and what is still missing before the
+bot can work, tick the resources you want, press **Start**, and it gathers until you
+press **Stop**. Everything the bot does shows up in the log.
+
+* **Gather** : one tick per resource, `tree` is ticked by default
+* **Confidence** : lower finds more resources and makes more mistakes, `0.8` is a good start
+* **Game window** : the title of the window to capture, only change it if the game is not found
+* **Show what the model sees** : opens a second window drawing the boxes, useful to check the model, press `q` on it to stop the bot
+* **Calibrate the gathering bar** : see below, needed once
+
+### Calibration, only once
+
+The bot knows the character is gathering by looking for the gathering bar in the game
+window, and it needs a picture of that bar to compare with. Press **Calibrate the
+gathering bar**, then start gathering a resource by hand before the countdown ends. It
+writes `images/cropped_bar_resource.png` and the check turns green.
+
+If the bot clicks a resource but never starts gathering, calibrate again while the bar
+is really on screen.
+
+### Without the interface
+
+`Application/main.py` does the same thing from the command line. By default it runs
+`tree_gathering()`, which only clicks on trees and chops them one after the other. To
+farm something else, call `gathering()` with the resources you want, or with nothing
+to farm everything the model knows :
+
+```python
+gathering(targets=["tree"])           # trees only
+gathering(targets=["stone", "ore"])   # rocks and ore veins
+gathering()                           # everything detected
+```
+
+Available resources are `tree`, `stone`, `ore`, `fiber` and `hide`. Each one has its
+own walking and gathering timeouts in `Application/Albion/resources.py`, trees taking
+longer than rocks.
+
+The classes of the model are matched against the aliases listed in the same file, so
+a model knowing `rought log` and `travertine` farms with the `tree` and the `stone`
+profiles. The log shows what each class of your model resolved to when it starts, and
+a class matching nothing is never clicked, monsters for example :
+
+```
+Class 0 'iron ore' -> ore (ignored)
+Class 1 'monster' -> unknown (ignored)
+Class 2 'rought log' -> tree
+Class 3 'travertine' -> stone (ignored)
+```
+
+If a resource is never gathered, add the name of its class in the aliases of the
+matching profile.
 
 <p align="right"><a href="#top">⬆️</a></p>
 
