@@ -31,6 +31,7 @@
       <a href="#getting-started">📋 Getting Started</a>
       <ul>
         <li><a href="#prerequisites">🗺️ Prerequisites</a></li>
+        <li><a href="#-on-linux">🐧 On Linux</a></li>
         <li><a href="#installation">⚙️ Installation</a></li>
       </ul>
     </li>
@@ -99,6 +100,52 @@ next to the `Application` folder.
 
 Testing folder, is a folder that contains my test during development phase.
 
+### 🐧 On Linux
+
+The bot runs on Linux, on X11 as well as on Wayland, but the two need different tools
+underneath and Wayland needs a few things installed.
+
+On **X11** nothing else is needed, `pyautogui` moves the mouse and `mss` grabs the
+window, exactly like on Windows.
+
+On **Wayland** a program is not allowed to move the cursor or to read the screen, so
+the compositor and a virtual input device do it instead:
+
+* the window is found and the cursor is moved through `hyprctl`, so **Hyprland** is the
+  only Wayland compositor supported for now
+* the screen is grabbed with **grim**, `mss` reads the X11 root window, which holds
+  nothing at all on a wlroots compositor and would give back a black image
+* the buttons and the keys are pressed with **ydotool**, which writes to `/dev/uinput`
+  below the compositor and cannot be told apart from a real mouse
+
+```bash
+sudo pacman -S --needed tk ydotool grim
+
+# Let the input group open /dev/uinput, so ydotoold does not have to run as root.
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' \
+    | sudo tee /etc/udev/rules.d/80-uinput.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG input $USER
+
+# Then log out and back in, for the group to be given, and start the daemon.
+systemctl --user daemon-reload
+systemctl --user enable --now ydotoold
+```
+
+`tk` is what `tkinter` needs to draw the interface, Python does not ship it on Arch.
+
+`ydotoold` is run as a user service, and not as the system one the package ships,
+because the system one keeps its socket for root only and the bot would not be allowed
+to write in it. The unit lives in `~/.config/systemd/user/ydotoold.service`.
+
+The interface tells you which of these is missing in its **Ready to run** list, and the
+list is read again every few seconds, so it turns green as you install them without
+having to close the window.
+
+The game window is looked for under the name `Albion`, and not `Albion Online Client`
+like on Windows, because the Linux client does not use that title. The launcher is
+skipped on purpose, so leaving the launcher open next to the game changes nothing.
+
 <p align="right"><a href="#top">⬆️</a></p>
 
 
@@ -108,13 +155,21 @@ Testing folder, is a folder that contains my test during development phase.
 Before running the project, you need to install the requirements.
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+On a machine without an Nvidia card, the CPU build of torch is a much smaller download
+and just as good here, the model only runs once per resource :
+
+```bash
+.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 ```
 
 Start Albion Online, then start the interface :
 
 ```bash
-python Application/ui.py
+.venv/bin/python Application/ui.py
 ```
 
 It needs nothing more than Python, tkinter comes with it.

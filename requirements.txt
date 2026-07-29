@@ -1,9 +1,20 @@
-opencv-python==4.9.0.80
+# The pin used to be 4.9.0.80, dropped because no wheel is built for it on recent
+# Python versions and building OpenCV from source takes hours.
+opencv-python>=4.9
 mss
 numpy
-pyautogui
 torch
 torchvision
+
+# Mouse and keyboard.
+# Windows, macOS and Linux running X11 are driven through pyautogui. A Wayland
+# session cannot be driven by it at all, ydotool is used there instead and this
+# package is left unused, see the Linux part of the README.
+pyautogui
+
+# X11 window lookup, pyautogui pulls it in already but the capture needs it on
+# its own when the session is X11.
+python-xlib; sys_platform == "linux"
 
 # Window capture, one library per platform
 pywin32; sys_platform == "win32"

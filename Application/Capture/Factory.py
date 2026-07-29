@@ -1,10 +1,12 @@
 from platform import system
 
+from Application.game import DEFAULT_WINDOW_NAME
+
 
 class CaptureFactory:
     capture = None
 
-    def __init__(self, window_name="Albion Online Client"):
+    def __init__(self, window_name=DEFAULT_WINDOW_NAME):
 
         self.windowName = window_name
 
@@ -16,5 +18,8 @@ class CaptureFactory:
         elif system() == "Darwin":
             from .MacOS import MacOSCapture
             self.capture = MacOSCapture(window_name=window_name)
+        elif system() == "Linux":
+            from .Linux import LinuxCapture
+            self.capture = LinuxCapture(window_name=window_name)
         else:
-            raise Exception(f"{system()} is not supported, only Windows and MacOS are")
+            raise Exception(f"{system()} is not supported, only Windows, MacOS and Linux are")

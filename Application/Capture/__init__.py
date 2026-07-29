@@ -2,6 +2,8 @@ from abc import abstractmethod
 from mss import mss
 from numpy import array
 
+from Application.game import DEFAULT_WINDOW_NAME
+
 
 class ScreenInformation:
     top = 0
@@ -11,11 +13,16 @@ class ScreenInformation:
 
     ALBION_HEADER_HEIGHT = 30
 
-    def __init__(self, top, left, width, height):
-        self.top = top + self.ALBION_HEADER_HEIGHT
+    def __init__(self, top, left, width, height, header=ALBION_HEADER_HEIGHT):
+        """
+        :param header: Height of the title bar to cut out of the capture, so the model
+                       only sees the game. Window managers drawing no decoration around
+                       the game, every Wayland compositor for instance, pass 0 here.
+        """
+        self.top = top + header
         self.left = left
         self.width = width
-        self.height = height - self.ALBION_HEADER_HEIGHT
+        self.height = height - header
 
     def center(self):
         return self.left + self.width / 2, self.top + self.height / 2
@@ -25,7 +32,7 @@ class ScreenInformation:
 
 
 class Capture:
-    WINDOWS_NAME = "Albion Online Client"
+    WINDOWS_NAME = DEFAULT_WINDOW_NAME
 
     def __init__(self, window_name=WINDOWS_NAME):
         self.windowName = window_name
@@ -39,15 +46,20 @@ class Capture:
             "height": 0
         }
 
-    def __get_screen_information(self) -> ScreenInformation:
-        with mss() as sct:
-            info = sct.monitors[1]
-            return ScreenInformation(
-                top=info["top"],
-                left=info["left"],
-                width=info["width"],
-                height=info["height"]
-            )
+    def __get_screen_information(self) -> ScreenInformation | None:
+        # mss needs X11, and a Wayland session running no XWayland has none. Only the
+        # window is grabbed anyway, so the size of the screen is not worth failing on.
+        try:
+            with mss() as sct:
+                info = sct.monitors[1]
+                return ScreenInformation(
+                    top=info["top"],
+                    left=info["left"],
+                    width=info["width"],
+                    height=info["height"]
+                )
+        except Exception:
+            return None
 
     @abstractmethod
     def get_window_information(self) -> ScreenInformation | None:

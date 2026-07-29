@@ -9,6 +9,9 @@ BOTTOM_X, BOTTOM_Y = 293, 410
 # Confidence over which the bar is considered visible.
 CONFIDENCE = 0.8
 
+# Spread of the grey levels under which a saved picture is considered flat, see usable.
+FLATNESS = 5.0
+
 
 def crop(capture):
     """
@@ -67,6 +70,20 @@ def save(capture):
     cv.imwrite(str(paths.RESOURCE_BAR), template)
 
     return template
+
+
+def usable(template):
+    """
+    Tell whether a saved picture of the bar can be matched at all.
+
+    A calibration done while nothing was being gathered saves a flat piece of
+    background, and matchTemplate answers noise on a picture with nothing in it, so the
+    bot would either never start gathering or believe it never stops.
+
+    :param template: Picture of the bar to check.
+    :return: True when the picture holds something to look for.
+    """
+    return float(template.std()) >= FLATNESS
 
 
 def confidence(capture, template):

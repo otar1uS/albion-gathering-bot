@@ -1,6 +1,6 @@
 import cv2 as cv
 import torch
-from Application import paths
+from Application import game, paths
 from Application.Albion import resources, screen
 from Application.Capture.Factory import CaptureFactory
 from time import time
@@ -17,7 +17,7 @@ class AlbionDetection:
                  model_name=MODEL_NAME,
                  debug=False,
                  confidence=CONFIDENCE,
-                 window_name="Albion Online Client",
+                 window_name=game.DEFAULT_WINDOW_NAME,
                  targets=None,
                  preview=None
                  ):
@@ -202,7 +202,7 @@ class AlbionDetection:
         center_x = ((center_x * self.window_capture.window.width) / self.IMG_SIZE) + self.window_capture.window.left
         center_y = ((center_y * self.window_capture.window.height) / self.IMG_SIZE) + self.window_capture.window.top
 
-        # pyautogui works with pixels, and a torch value would leak here otherwise.
+        # The mouse is driven in whole pixels, and a torch value would leak here otherwise.
         return int(center_x), int(center_y)
 
     def character_screen_position(self):
@@ -259,7 +259,7 @@ class AlbionDetection:
             self.draw_boxes(img, coordinates)
             cv.putText(img, f'FPS {1 / (time() - loop_time):.1f}', (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                        (255, 255, 255), 1)
-            cv.imshow("Founded", img)
+            cv.imshow(game.PREVIEW_WINDOW_TITLE, img)
 
         for center_x, center_y, ressource in self.centers(coordinates):
             center_x, center_y = self.__convert_coordinates_to_screen_position(center_x, center_y)

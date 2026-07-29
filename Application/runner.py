@@ -5,9 +5,10 @@ from time import sleep
 
 from Application import paths
 from Application.Albion import resources
+from Application.game import DEFAULT_WINDOW_NAME
 
 
-def game_window(window_name="Albion Online Client"):
+def game_window(window_name=DEFAULT_WINDOW_NAME):
     """
     Look for the game window.
 
@@ -22,18 +23,22 @@ def game_window(window_name="Albion Online Client"):
         return None
 
 
-def checks(window_name="Albion Online Client"):
+def checks(window_name=DEFAULT_WINDOW_NAME):
     """
     Check everything the bot needs before it can start.
 
     :param window_name: Title of the game window.
     :return: List of (name, ok, detail).
     """
+    from Application.Interaction import pointer
+
     window = game_window(window_name)
+    mouse_ok, mouse_detail = pointer.availability()
 
     return [
         ("Albion Online", window is not None,
          str(window) if window is not None else f"no window named {window_name}, start the game"),
+        ("Mouse and keyboard", mouse_ok, mouse_detail),
         ("Model", paths.MODEL.exists(),
          str(paths.MODEL) if paths.MODEL.exists() else f"put the trained weights in {paths.MODEL}"),
         ("Yolov5", paths.YOLOV5.joinpath("hubconf.py").exists(),
@@ -79,7 +84,7 @@ class BotRunner:
     def log(self, text):
         self.messages.put(("log", text))
 
-    def start(self, targets, confidence=0.8, window_name="Albion Online Client", preview=False):
+    def start(self, targets, confidence=0.8, window_name=DEFAULT_WINDOW_NAME, preview=False):
         """
         Start gathering.
 
@@ -119,7 +124,7 @@ class BotRunner:
 
         self.log("Stopping...")
 
-    def calibrate(self, window_name="Albion Online Client", delay=10):
+    def calibrate(self, window_name=DEFAULT_WINDOW_NAME, delay=10):
         """
         Save the picture of the gathering bar, the character has to be gathering when
         the delay is over.
@@ -194,7 +199,21 @@ class BotRunner:
 
             self.log(f"Saved a {template.shape[1]}x{template.shape[0]} picture of the bar "
                      f"in {paths.RESOURCE_BAR}")
-            self.log("If the bot never starts gathering, calibrate again while the bar is on screen")
+
+            if not bar.usable(template):
+                self.log("That picture is flat, the character was most likely not gathering when it "
+                         "was taken. Start gathering first, then calibrate again")
+                return
+
+            # The character is still gathering, so the bar is still there and matching it
+            # right away says whether the calibration is worth anything.
+            found = bar.confidence(capture, template)
+
+            self.log(f"The bar is recognized at {found:.2f}, it has to stay over {bar.CONFIDENCE} "
+                     f"while gathering and drop under it once the node is empty")
+
+            if found < bar.CONFIDENCE:
+                self.log("That is too low, calibrate again while the bar is really on screen")
 
         except Exception as e:
             self.messages.put(("error", str(e)))

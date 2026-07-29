@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
-from Application.runner import BotRunner, checks, game_window, resource_names
+from Application.game import UI_WINDOW_TITLE
+from Application.runner import DEFAULT_WINDOW_NAME, BotRunner, checks, game_window, resource_names
 
 # Time in millisecond between two reads of what the bot has to say.
 MESSAGE_POLLING = 150
@@ -22,12 +23,12 @@ class Interface(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Albion gathering bot")
+        self.title(UI_WINDOW_TITLE)
         self.minsize(560, 620)
 
         self.runner = BotRunner()
         self.resources = {name: tk.BooleanVar(value=name == "tree") for name in resource_names()}
-        self.window_name = tk.StringVar(value="Albion Online Client")
+        self.window_name = tk.StringVar(value=DEFAULT_WINDOW_NAME)
         # A string and not a double, the box can hold whatever the user types in it.
         self.confidence = tk.StringVar(value="0.8")
         self.preview = tk.BooleanVar(value=False)
@@ -99,11 +100,14 @@ class Interface(tk.Tk):
 
         for row, (name, ok, detail) in enumerate(checks(self.window_name.get())):
             ttk.Label(self.checks_frame, text=f"{'v' if ok else 'x'}  {name}").grid(row=row, column=0, sticky="w")
-            ttk.Label(self.checks_frame, text=detail, foreground="grey").grid(row=row, column=1, sticky="w", padx=8)
+            ttk.Label(self.checks_frame, text=detail, foreground="grey",
+                      wraplength=380, justify="left").grid(row=row, column=1, sticky="w", padx=8)
 
     def __refresh_game(self):
         """
-        Tell if the game is running, over and over.
+        Tell if the game is running, over and over. The rest of the checks are read
+        again at the same time, so installing what is missing turns them green without
+        having to close the interface.
         """
         window = game_window(self.window_name.get())
 
@@ -111,6 +115,11 @@ class Interface(tk.Tk):
             self.game.set(f"Albion Online is not running, no window named {self.window_name.get()}")
         else:
             self.game.set(f"Albion Online is running, {window}")
+
+        # Only while the bot is idle, the checks look for the window and spawn processes
+        # to do it, which is not worth doing behind a running bot.
+        if not self.runner.is_running():
+            self.__refresh_checks()
 
         self.after(GAME_POLLING, self.__refresh_game)
 

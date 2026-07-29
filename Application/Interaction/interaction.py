@@ -1,9 +1,9 @@
 from Application.Albion import bar
 from Application.Albion.detection import AlbionDetection
+from Application.Interaction import pointer
 from math import sqrt
 from time import sleep, time
 import cv2 as cv
-import pyautogui
 
 
 class Gathering:
@@ -20,12 +20,20 @@ class Interaction:
     # Time in second between two reads of the bar, keeps the CPU quiet.
     BAR_POLLING = 0.2
 
+    # Time in second between two looks at where the mouse is, see __wait_polling.
+    FAILSAFE_POLLING = 1.0
+
     # A gathered node stays on screen for a while, so it is skipped during that
     # time to stop the bot from clicking the same empty node over and over. The
     # cooldown has to stay above the timeouts of a profile, otherwise a node comes
     # back while the bot is still busy giving up on the next one.
     DEPLETED_RADIUS = 60
     DEPLETED_COOLDOWN = 120
+
+    # Where the cursor is parked between two nodes, so the tooltip of the game stops
+    # covering what the model is looking at. Far enough from the corner not to trip
+    # the panic button watching it.
+    PARKING_X, PARKING_Y = 10, 10
 
     def __init__(self, model):
         self.model: AlbionDetection = model
@@ -36,12 +44,14 @@ class Interaction:
         self.debug = self.model.debug
         self.preview = self.model.preview
         self.img_border_resource = bar.load()
+        self.pointer = pointer.create()
+        self.last_failsafe_check = time()
 
     def toggle_ath(self):
-        pyautogui.hotkey('alt', 'h')
+        self.pointer.hotkey('alt', 'h')
 
     def go_on_mount(self):
-        pyautogui.press('a')
+        self.pointer.press('a')
 
     def __is_mining(self):
         return bar.is_visible(self.model.window_capture, self.img_border_resource)
@@ -58,6 +68,13 @@ class Interaction:
                 self.stop_requested = True
         else:
             sleep(self.BAR_POLLING)
+
+        # Gathering a node takes tens of seconds, and the mouse thrown in the corner has
+        # to stop the bot during that time too, and not only between two nodes. Asking
+        # the compositor costs a process, so it is not asked on every read of the bar.
+        if time() - self.last_failsafe_check >= self.FAILSAFE_POLLING:
+            self.last_failsafe_check = time()
+            self.pointer.check_failsafe()
 
     def __mining(self, timeout):
         """
@@ -149,8 +166,8 @@ class Interaction:
             print(f"Gathering {self.current_gathering}")
 
         try:
-            pyautogui.leftClick(self.current_gathering.x, self.current_gathering.y, interval=0.5)
-            pyautogui.moveTo(10, 10)
+            self.pointer.left_click(self.current_gathering.x, self.current_gathering.y)
+            self.pointer.move(self.PARKING_X, self.PARKING_Y)
 
             gathered = self.__moving(resource.moving_timeout) and self.__mining(resource.gathering_timeout)
         finally:
@@ -186,7 +203,7 @@ class Interaction:
 
         except KeyboardInterrupt:
             print("Stopped")
-        except pyautogui.FailSafeException:
-            print("Stopped by the mouse in the corner of the screen")
+        except pointer.FailSafe as e:
+            print(str(e))
         finally:
             cv.destroyAllWindows()
