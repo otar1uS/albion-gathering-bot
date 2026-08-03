@@ -1,285 +1,95 @@
-<div id="top"></div>
+# Albion gathering bot
 
+Watches the game the way a person does — a screenshot, a trained eye, a mouse — and
+gathers wood, stone, ore, fiber and hide on its own. No game files are touched, no
+memory is read, no packets are sniffed: everything the bot knows it learned from pixels.
 
+> Automating Albion Online is against its terms of service and accounts caught doing it
+> get banned. Nothing in this design makes that impossible, only less obvious.
 
-<!-- PROJECT LOGO -->
-<br />
-<div align="center">
-    <img src="ressources/logo.png" alt="Logo" width="80" height="80" />
-
-<h3 align="center">Object detection Yolov5</h3>
-
-  <p align="center">Bored to farm all day in albion only (I'm kidding). Learn about object detection and yolov5</p>
-    <img src="ressources/prediction.jpg" alt="prediction" />
-</div>
-
-
-
- <br />  
-
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">🧭 About The Project</a>
-      <ul>
-        <li><a href="#built-with">🏗️ Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">📋 Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">🗺️ Prerequisites</a></li>
-        <li><a href="#-on-linux">🐧 On Linux</a></li>
-        <li><a href="#installation">⚙️ Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">💾 Usage</a></li>
-    <li><a href="#contributing">🔗 Contributing</a></li>
-    <li><a href="#license">📰 License</a></li>
-    <li><a href="#contact">📫 Contact</a></li>
-    <li><a href="#acknowledgments">⛱️ Acknowledgments</a></li>
-  </ol>
-</details>
-
-<br>
-
-
-
-<!-- ABOUT THE PROJECT -->
-## 🧭 About The Project
-
-### 🏗️ Built With
-
-List of technologies / frameworks used during the project.
-
-* Python 3.8
-* Pytorch
-* Yolov5
-* Albion Online
-* OpenCV
-* Numpy
-* Roboflow
-
-<p align="right"><a href="#top">⬆️</a></p>
-
-
-
-
-<!-- GETTING STARTED -->
-## 📋 Getting Started
-
-I'd always wonder how to make a object detection model and how to use it in a real case scenario. I decided to use Yolov5 and make a scanner for Albion Online. The goal is to detect the resources on the screen and click on the coordinate, do this in loop.
-
-### 🗺️ Prerequisites
-
-Python 3.10 or newer is required to run the project.
-
-Albion Online is also required to run the project.
-
-The yolov5 submodule holds the code loading the model, get it with :
-
-```bash
-git submodule update --init --recursive
-```
-
-Create an account on Roboflow and download the dataset in Yolov5 format.
-At this url: https://universe.roboflow.com/albiononline-c8fxi/albiongathering
-
-You could large the data set adding your own images.
-
-Get the data set and put it in the yolov5 folder and run the train set (could use google collab to train data using GPU).
-
-```bash
-python train.py --img 640 --epochs 3 --data coco128.yaml --weights yolov5s.pt
-```
-
-Rename the trained weights to `best.pt` and put them at the root of the repository,
-next to the `Application` folder.
-
-Testing folder, is a folder that contains my test during development phase.
-
-### 🐧 On Linux
-
-The bot runs on Linux, on X11 as well as on Wayland, but the two need different tools
-underneath and Wayland needs a few things installed.
-
-On **X11** nothing else is needed, `pyautogui` moves the mouse and `mss` grabs the
-window, exactly like on Windows.
-
-On **Wayland** a program is not allowed to move the cursor or to read the screen, so
-the compositor and a virtual input device do it instead:
-
-* the window is found and the cursor is moved through `hyprctl`, so **Hyprland** is the
-  only Wayland compositor supported for now
-* the screen is grabbed with **grim**, `mss` reads the X11 root window, which holds
-  nothing at all on a wlroots compositor and would give back a black image
-* the buttons and the keys are pressed with **ydotool**, which writes to `/dev/uinput`
-  below the compositor and cannot be told apart from a real mouse
-
-```bash
-sudo pacman -S --needed tk ydotool grim
-
-# Let the input group open /dev/uinput, so ydotoold does not have to run as root.
-echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' \
-    | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
-sudo usermod -aG input $USER
-
-# Then log out and back in, for the group to be given, and start the daemon.
-systemctl --user daemon-reload
-systemctl --user enable --now ydotoold
-```
-
-`tk` is what `tkinter` needs to draw the interface, Python does not ship it on Arch.
-
-`ydotoold` is run as a user service, and not as the system one the package ships,
-because the system one keeps its socket for root only and the bot would not be allowed
-to write in it. The unit lives in `~/.config/systemd/user/ydotoold.service`.
-
-The interface tells you which of these is missing in its **Ready to run** list, and the
-list is read again every few seconds, so it turns green as you install them without
-having to close the window.
-
-The game window is looked for under the name `Albion`, and not `Albion Online Client`
-like on Windows, because the Linux client does not use that title. The launcher is
-skipped on purpose, so leaving the launcher open next to the game changes nothing.
-
-<p align="right"><a href="#top">⬆️</a></p>
-
-
-<!-- USAGE EXAMPLES -->
-## 💾 Usage
-
-Before running the project, you need to install the requirements.
-
-```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
-
-On a machine without an Nvidia card, the CPU build of torch is a much smaller download
-and just as good here, the model only runs once per resource :
-
-```bash
-.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-```
-
-Start Albion Online, then start the interface :
-
-```bash
-.venv/bin/python Application/ui.py
-```
-
-It needs nothing more than Python, tkinter comes with it.
-
-The window tells you whether the game is running and what is still missing before the
-bot can work, tick the resources you want, press **Start**, and it gathers until you
-press **Stop**. Everything the bot does shows up in the log.
-
-* **Gather** : one tick per resource, `tree` is ticked by default
-* **Confidence** : lower finds more resources and makes more mistakes, `0.8` is a good start
-* **Game window** : the title of the window to capture, only change it if the game is not found
-* **Show what the model sees** : opens a second window drawing the boxes, useful to check the model, press `q` on it to stop the bot
-* **Calibrate the gathering bar** : see below, needed once
-
-### Calibration, only once
-
-The bot knows the character is gathering by looking for the gathering bar in the game
-window, and it needs a picture of that bar to compare with. Press **Calibrate the
-gathering bar**, then start gathering a resource by hand before the countdown ends. It
-writes `images/cropped_bar_resource.png` and the check turns green.
-
-If the bot clicks a resource but never starts gathering, calibrate again while the bar
-is really on screen.
-
-### Without the interface
-
-`Application/main.py` does the same thing from the command line. By default it runs
-`tree_gathering()`, which only clicks on trees and chops them one after the other. To
-farm something else, call `gathering()` with the resources you want, or with nothing
-to farm everything the model knows :
-
-```python
-gathering(targets=["tree"])           # trees only
-gathering(targets=["stone", "ore"])   # rocks and ore veins
-gathering()                           # everything detected
-```
-
-Available resources are `tree`, `stone`, `ore`, `fiber` and `hide`. Each one has its
-own walking and gathering timeouts in `Application/Albion/resources.py`, trees taking
-longer than rocks.
-
-The classes of the model are matched against the aliases listed in the same file, so
-a model knowing `rought log` and `travertine` farms with the `tree` and the `stone`
-profiles. The log shows what each class of your model resolved to when it starts, and
-a class matching nothing is never clicked, monsters for example :
+## Starting it
 
 ```
-Class 0 'iron ore' -> ore (ignored)
-Class 1 'monster' -> unknown (ignored)
-Class 2 'rought log' -> tree
-Class 3 'travertine' -> stone (ignored)
+.venv\Scripts\python.exe -m albion.app.ui             the window
+.venv\Scripts\python.exe -m albion --targets tree     the console
+.venv\Scripts\python.exe -m albion.selftest           check every layer without gathering
 ```
 
-If a resource is never gathered, add the name of its class in the aliases of the
-matching profile.
+Have the game running, windowed, with your character standing in the world. Press
+**Check setup** in the window, then **Start**. Stop it any time by throwing the mouse
+into the top left corner of the screen.
 
-<p align="right"><a href="#top">⬆️</a></p>
+## Farming routes
 
+Record a lap once by walking it yourself, then let the bot repeat it:
 
-<!-- CONTRIBUTING -->
-## 🔗 Contributing
+```
+.venv\Scripts\python.exe -m albion.record --name forest_lap
+    ...walk the lap by clicking in the game, press F9 when done...
+.venv\Scripts\python.exe -m albion --route forest_lap
+```
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+Waypoints are stored as fractions of the window, so a recorded route survives the window
+being moved or resized. On playback the route only does the walking: everything found
+along the way still goes through the same verification and gathering as ever, so the
+route drifting a little costs nothing.
 
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
-Don't forget to give the project a star! Thanks again!
+## How it works
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+```
+albion/
+  config.py        every tunable number, saved to config.json, each with its why
+  vision/
+    capture.py     photographs the game window itself (PrintWindow), so a window
+                   covering the game does not become what the model sees
+    detector.py    yolov5 weights (best_merged.pt), augmented inference, per class
+                   confidence thresholds
+    verify.py      hovers a found node and asks the game: a real resource gets its
+                   name drawn over it, scenery gets nothing
+    motion.py      frame differencing: is the character walking, working, or is the
+                   game not rendering at all (login screen, loading, disconnect)
+  control/input.py the mouse: move, wait, then click, because the game resolves what
+                   is under the cursor before it reads the button
+  game/
+    resources.py   what each resource is called across datasets, its timeouts, its
+                   priority, where to aim on it (trees are clicked on the trunk)
+    mount.py       rides to anything far away, knows gathering dismounts by itself
+    combat.py      walks away from monsters that come to the character; the bot
+                   cannot read its own health, so it does not pretend it can fight
+  nav/
+    navigator.py   click to walk, expanding square search, never clicks the interface
+    anti_stuck.py  notices repeating, wandering and looping, recovers in escalating
+                   steps, and stops honestly when nothing works
+    routes.py      record and replay farming laps
+  bot/gatherer.py  the state machine: SCANNING, VERIFYING, TRAVELLING, GATHERING,
+                   ROAMING, RECOVERING
+  app/             the window, the runner thread, the wiring
+```
 
-<p align="right"><a href="#top">⬆️</a></p>
+Detections the model is unsure of are confirmed by hovering before anything walks
+anywhere; detections it is very sure of are tested by clicking even when the hover finds
+nothing, because the click is the truth: a real node starts a gathering animation and
+scenery does not. A node is clicked until it gives nothing back, so trees are chopped to
+the last charge rather than abandoned half done.
 
+Everything it prints goes to `albion_bot.log` as well as the window, so an overnight run
+leaves evidence.
 
+## Training
 
+The weights are `best_merged.pt`, trained on this machine's Intel Arc A770 from six
+merged public datasets (`training/`, `datasets/albion_merged`). Trees are the thinnest
+class in that data, which is why they get their own lower threshold and augmented
+inference. To make the model better at *your* zone:
 
-<!-- LICENSE -->
-## 📰 License
+```
+.venv\Scripts\python.exe training\autolabel.py collect --minutes 20   play normally
+.venv\Scripts\python.exe training\autolabel.py label                  model pre-labels
+    ...fix the boxes in a labelling tool...
+resume_training.bat                                                   retrain
+```
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
-
-<p align="right"><a href="#top">⬆️</a></p>
-
-
-
-
-<!-- CONTACT -->
-## 📫 Contact
-
-Reach me at : gauron.dorian.pro@gmail.com.
-
-Project Link: [https://github.com/Michelprogram/magic-scanner.git](https://github.com/Michelprogram/magic-scanner.git)
-
-<p align="right"><a href="#top">⬆️</a></p>
-
-
-
-
-<!-- ACKNOWLEDGMENTS -->
-## ⛱️ Acknowledgments
-
-This space is a list to resources i found helpful and would like to give credit to.
-
-* [Roboflow](https://roboflow.com/)
-* [Roboflow deploy](https://docs.ultralytics.com/yolov5/tutorials/train_custom_data/)
-* [Yolov5](https://github.com/ultralytics/yolov5)
-* 
-  
-<p align="right"><a href="#top">⬆️</a></p>
-
-<a href="https://github.com/othneildrew/Best-README-Template">Template inspired by othneildrew</a>
+The previous implementation lives on in `Application/` until the new one has earned its
+keep. This project began as a fork of
+[Michelprogram/albion-gathering-bot](https://github.com/Michelprogram/albion-gathering-bot);
+the detection idea and the yolov5 submodule arrangement come from there.

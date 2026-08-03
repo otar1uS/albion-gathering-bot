@@ -30,7 +30,11 @@ class Interface(tk.Tk):
         self.resources = {name: tk.BooleanVar(value=name == "tree") for name in resource_names()}
         self.window_name = tk.StringVar(value=DEFAULT_WINDOW_NAME)
         # A string and not a double, the box can hold whatever the user types in it.
-        self.confidence = tk.StringVar(value="0.8")
+        # 0.8 was needed against the first weights, which drew logs over bare ground and
+        # had to be held to a high bar to be bearable. The merged weights are accurate
+        # enough to be believed at 0.5, and the resources the model is least sure of ask
+        # for their own threshold anyway, see resources.TREE.
+        self.confidence = tk.StringVar(value="0.5")
         self.preview = tk.BooleanVar(value=False)
         self.game = tk.StringVar(value="Looking for Albion Online...")
 
@@ -140,7 +144,7 @@ class Interface(tk.Tk):
         try:
             value = float(self.confidence.get())
         except (ValueError, tk.TclError):
-            value = 0.8
+            value = 0.5
             self.__write(f"Confidence has to be a number, using {value}")
 
         return min(max(value, 0.05), 0.99)

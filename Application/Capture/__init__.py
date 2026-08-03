@@ -61,6 +61,19 @@ class Capture:
         except Exception:
             return None
 
+    def focus(self) -> bool:
+        """
+        Bring the game in front of everything else.
+
+        The capture grabs a rectangle of the screen, not the private picture of the
+        game, so any window sitting over it is what the model gets shown. The bot has
+        no reason to keep looking at a browser.
+
+        :return: True when the game was brought in front, False when the platform has
+                 no way to do it, which is not worth failing on.
+        """
+        return False
+
     @abstractmethod
     def get_window_information(self) -> ScreenInformation | None:
         pass

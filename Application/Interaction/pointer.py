@@ -51,6 +51,14 @@ class Pointer:
     # game ignores a click landing on the same frame the cursor arrived.
     CLICK_DELAY = 0.5
 
+    # Time in second the cursor takes to travel to where it is going, rather than being
+    # put there between two frames. The game works out what is under the cursor from the
+    # movement it receives, and a pointer that jumps the width of the screen in one event
+    # leaves it having never been over the tree at all: it reads the click against
+    # whatever it last knew was there. Riczap's The-Gatherer moves with duration=0.5 for
+    # the same reason and is the reason this is here.
+    MOVE_DURATION = 0.35
+
     def move(self, x, y):
         raise NotImplementedError
 
@@ -73,7 +81,9 @@ class Pointer:
         x, y = self.position()
 
         if x <= FAILSAFE_RADIUS and y <= FAILSAFE_RADIUS:
-            raise FailSafe("Stopped by the mouse in the corner of the screen")
+            # The position is named because the bot parks the cursor near that corner
+            # itself, and a panic button going off on its own is a mystery otherwise.
+            raise FailSafe(f"Stopped by the mouse in the corner of the screen, at ({x}, {y})")
 
 
 class PyAutoGUIPointer(Pointer):
@@ -92,16 +102,27 @@ class PyAutoGUIPointer(Pointer):
         try:
             return call(*arguments, **named)
         except self.pyautogui.FailSafeException:
-            raise FailSafe("Stopped by the mouse in the corner of the screen")
+            raise FailSafe(f"Stopped by pyautogui, the mouse being at {self.position()}")
 
     def move(self, x, y):
-        self.__guarded(self.pyautogui.moveTo, x, y)
+        self.__guarded(self.pyautogui.moveTo, x, y, duration=self.MOVE_DURATION)
 
     def position(self):
         return self.pyautogui.position()
 
     def left_click(self, x, y):
-        self.__guarded(self.pyautogui.leftClick, x, y, interval=self.CLICK_DELAY)
+        # Moved, waited on, then clicked, in three steps rather than in one call. The
+        # interval of pyautogui is the gap between repeated clicks and it sleeps after
+        # the button has already been pressed, so leftClick(x, y, interval=...) put the
+        # cursor on the tree and pressed on the very same instant and only then waited.
+        # The game decides what is under the cursor before it reads the button, so those
+        # clicks landed on whatever the cursor had been over previously, which was the
+        # corner the bot parks in: the character never moved and never gathered anything,
+        # while the bot went on thinking every node it clicked had been dealt with.
+        self.check_failsafe()
+        self.move(x, y)
+        sleep(self.CLICK_DELAY)
+        self.__guarded(self.pyautogui.click)
 
     def press(self, key):
         self.__guarded(self.pyautogui.press, key)

@@ -16,6 +16,10 @@ pyautogui
 # its own when the session is X11.
 python-xlib; sys_platform == "linux"
 
+# Route recording: watches the real mouse while the user walks the lap they want
+# farmed, so their own clicks become the waypoints.
+pynput
+
 # Window capture, one library per platform
 pywin32; sys_platform == "win32"
 pyobjc-framework-Quartz; sys_platform == "darwin"

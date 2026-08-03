@@ -6,19 +6,23 @@ class ResourceProfile:
     Gathering behaviour of one kind of resource node.
     """
 
-    def __init__(self, name, aliases, gathering_timeout, moving_timeout, delay_between_nodes):
+    def __init__(self, name, aliases, gathering_timeout, moving_timeout, delay_between_nodes,
+                 confidence=None):
         """
         :param name: Canonical name of the resource.
         :param aliases: Labels of the model matching this resource.
         :param gathering_timeout: Maximum time in second spent on a node before giving up.
         :param moving_timeout: Maximum time in second spent walking to a node before giving up.
         :param delay_between_nodes: Time in second waited once a node is depleted.
+        :param confidence: Lowest confidence to accept for this resource alone, None to
+                           use the one the detection was built with.
         """
         self.name = name
         self.aliases = aliases
         self.gathering_timeout = gathering_timeout
         self.moving_timeout = moving_timeout
         self.delay_between_nodes = delay_between_nodes
+        self.confidence = confidence
 
     def match(self, label):
         """
@@ -50,13 +54,25 @@ class ResourceProfile:
 # A tree holds more charges than a rock and the character stops further away from it,
 # so both the gathering and the walking phases need a longer timeout. Waiting too
 # long costs nothing, the wait stops as soon as the node is depleted.
+# "rough" and "rought" are deliberately absent. The tier 2 wood is "Rough Logs" and the
+# tier 2 rock is "Rough Stone", and since the profiles are tried in order, a "rough" here
+# claimed the rock as a tree before STONE was ever asked. "logs" catches the wood on its
+# own, so nothing is lost by leaving the ambiguous word out.
+# Trees are the thinnest class the weights were trained on, 683 boxes against the 1587
+# of the ore, so the model recognises them correctly but is not sure of them: measured
+# over the 42 Forgotten Vigils frames in images/dataset, it finds a tree on 2 of them
+# above 0.5 and on 16 above 0.25, and the extra boxes are real trees, the birch being
+# gathered included. Nothing else needs lowering, stone, ore and hide all score above
+# 0.95 and a lower bar would only cost them false positives.
+# Raise this back once trees from this zone have been labelled and trained on.
 TREE = ResourceProfile(
     name="tree",
-    aliases=("tree", "trees", "wood", "log", "logs", "birch", "chestnut", "rough", "rought",
+    aliases=("tree", "trees", "wood", "log", "logs", "birch", "chestnut",
              "pine", "cedar", "bloodoak", "ashenbark"),
     gathering_timeout=45,
     moving_timeout=20,
     delay_between_nodes=1.5,
+    confidence=0.30,
 )
 
 STONE = ResourceProfile(

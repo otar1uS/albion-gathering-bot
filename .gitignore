@@ -4,3 +4,10 @@ roboflow.py
 .idea
 .DS_Store
 __pycache__/
+
+# Training on this PC: the GPU virtualenv, the downloaded datasets and the Roboflow
+# key are all local, large or private, and none of them belong in the repository.
+.venv-train
+datasets/
+training/roboflow_key.txt
+yolov5/runs/

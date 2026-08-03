@@ -1,3 +1,5 @@
+import pathlib
+
 import cv2 as cv
 import torch
 from Application import game, paths
@@ -6,12 +8,32 @@ from Application.Capture.Factory import CaptureFactory
 from time import time
 from math import sqrt
 from pathlib import Path
+from platform import system
 
 
 class AlbionDetection:
     MODEL_NAME = paths.MODEL
     IMG_SIZE = screen.IMG_SIZE
     CONFIDENCE = 0.5
+
+    # Test time augmentation: the model is run over the frame again flipped and rescaled
+    # and the boxes are merged. It costs 157ms a frame against 69ms, which is 6.4 FPS
+    # where the bot asks for 2, and it is what makes the trees usable at all. Measured
+    # over the 42 frames of this zone in images/dataset, counting the frames holding a
+    # tree the bot would act on: 2 without it against 14 with it at 0.5 confidence, 12
+    # against 24 at 0.3, and the median best score in a frame goes 0.16 -> 0.36. Trees
+    # are the thinnest class in the training set, 560 boxes against the 11650 of the ore,
+    # and this buys back most of what that costs.
+    AUGMENT = True
+
+    # yolov5 drops anything under model.conf during its own non maximum suppression,
+    # and that default is 0.25, which quietly became the real threshold of the bot: a
+    # profile asking for less than that was never given the boxes to decide on, and
+    # find_node could not follow a node at a lower bar than it was picked at, however
+    # low it asked. The model is therefore opened up here and the bot does its own
+    # filtering in scan, per class. Boxes between this and a threshold are not acted
+    # upon, they only keep a node the bot is already standing at from disappearing.
+    MODEL_FLOOR = 0.10
 
     def __init__(self,
                  model_name=MODEL_NAME,
@@ -43,6 +65,11 @@ class AlbionDetection:
         self.confidence = confidence
         self.character_position_X = self.IMG_SIZE / 2
         self.character_position_Y = self.IMG_SIZE / 2 - 60
+
+        # Whatever the model recognised on the last look without any profile claiming
+        # it, monsters above all. The roaming reads it to walk around them instead of
+        # into them, and it is filled here so a single pass of the model serves both.
+        self.last_hazards = []
 
     def _process_image(self, img):
         """
@@ -122,6 +149,23 @@ class AlbionDetection:
         :return: Matching ResourceProfile.
         """
         return resources.resolve(self.classes[int(class_id)]["label"])
+
+    def _confidence_of(self, class_id):
+        """
+        Lowest confidence to accept for one class.
+
+        A single threshold for every class suits the model badly, because the classes
+        are not learned equally well: the resources it has seen thousands of times are
+        sure of themselves, while the trees are recognised correctly but scored low
+        simply for being rare in the training set. A profile may therefore ask for its
+        own bar, and only the classes that need it pay for it.
+
+        :param class_id: Class id given by the model.
+        :return: Confidence under which a box of that class is dropped.
+        """
+        confidence = self.profile_of(class_id).confidence
+
+        return self.confidence if confidence is None else confidence
 
     def draw_boxes(self, img, coordinates):
         """
@@ -205,6 +249,20 @@ class AlbionDetection:
         # The mouse is driven in whole pixels, and a torch value would leak here otherwise.
         return int(center_x), int(center_y)
 
+    def image_position(self, screen_x, screen_y):
+        """
+        Turn a position on the screen back into one in the 640x640 image the model works
+        with, the other way round from __convert_coordinates_to_screen_position.
+
+        :param screen_x: Position on the screen.
+        :param screen_y: Position on the screen.
+        :return: (x, y) in image coordinates.
+        """
+        window = self.window_capture.window
+
+        return (int((screen_x - window.left) * self.IMG_SIZE / window.width),
+                int((screen_y - window.top) * self.IMG_SIZE / window.height))
+
     def character_screen_position(self):
         """
         Position of the character on the screen.
@@ -231,6 +289,18 @@ class AlbionDetection:
                 f"train them with yolov5 and drop the best.pt file there"
             )
 
+        # Weights trained on Linux, on Google Colab for example, pickle the paths of
+        # the machine they were trained on as PosixPath, and Windows refuses to build
+        # one of those, so loading them fails before the first layer is read. Pointing
+        # PosixPath at WindowsPath while the checkpoint is unpickled is enough, those
+        # paths are never looked at again once the weights are in memory. It is put
+        # back right after, so nothing else in the process sees the swap.
+        posix = None
+
+        if system() == "Windows":
+            posix = pathlib.PosixPath
+            pathlib.PosixPath = pathlib.WindowsPath
+
         try:
             model = torch.hub.load(str(paths.YOLOV5), 'custom', path=str(self.model_name), source="local",
                                    force_reload=True, verbose=True)
@@ -238,7 +308,40 @@ class AlbionDetection:
         except Exception as e:
             raise Exception(f"Failed to load the model: {e}")
 
+        finally:
+            if posix is not None:
+                pathlib.PosixPath = posix
+
+        model.conf = self.MODEL_FLOOR
+
         return model
+
+    def scan(self, confidence_factor=1.0):
+        """
+        Take a picture of the game and resolve everything the model is sure enough of.
+
+        Every box is kept here, and not only the wanted resources, because the caller
+        needs the rest too: the roaming avoids the monsters, and following a node while
+        it is being gathered needs it found again whatever was asked for.
+
+        :param confidence_factor: Multiplier applied to every threshold, under 1 to
+                                  accept boxes the bot would not have picked a node
+                                  from. Following an already found node uses it, see
+                                  Interaction.find_node.
+        :return: (detections, image, boxes), detections being (screen_x, screen_y,
+                 profile) ordered from the closest to the character to the farthest.
+        """
+        img = self._process_image(self.window_capture.screenshot())
+        boxes = [box for box in self.model(img, augment=self.AUGMENT).xyxy[0]
+                 if float(box[4]) > self._confidence_of(box[5]) * confidence_factor]
+
+        detections = []
+
+        for center_x, center_y, class_id in self.centers(boxes):
+            screen_x, screen_y = self.__convert_coordinates_to_screen_position(center_x, center_y)
+            detections.append((screen_x, screen_y, self.profile_of(class_id)))
+
+        return detections, img, boxes
 
     def predict(self, ignore=None):
         """
@@ -250,23 +353,23 @@ class AlbionDetection:
                  position and profile are None when nothing has been detected.
         """
         loop_time = time()
-        img = self._process_image(self.window_capture.screenshot())
-        res = self.model(img)
-        coordinates = [coord for coord in res.xyxy[0]
-                       if float(coord[4]) > self.confidence and int(coord[5]) in self.target_ids]
+        detections, img, boxes = self.scan()
+
+        self.last_hazards = [(x, y) for x, y, profile in detections if profile is resources.DEFAULT]
 
         if self.preview:
-            self.draw_boxes(img, coordinates)
+            self.draw_boxes(img, [box for box in boxes if int(box[5]) in self.target_ids])
             cv.putText(img, f'FPS {1 / (time() - loop_time):.1f}', (10, 20), cv.FONT_HERSHEY_SIMPLEX, 0.5,
                        (255, 255, 255), 1)
             cv.imshow(game.PREVIEW_WINDOW_TITLE, img)
 
-        for center_x, center_y, ressource in self.centers(coordinates):
-            center_x, center_y = self.__convert_coordinates_to_screen_position(center_x, center_y)
-
-            if ignore is not None and ignore(center_x, center_y):
+        for screen_x, screen_y, profile in detections:
+            if profile not in self.targets:
                 continue
 
-            return center_x, center_y, self.profile_of(ressource), img
+            if ignore is not None and ignore(screen_x, screen_y):
+                continue
+
+            return screen_x, screen_y, profile, img
 
         return None, None, None, img

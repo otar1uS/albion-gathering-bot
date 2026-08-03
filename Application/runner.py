@@ -84,7 +84,7 @@ class BotRunner:
     def log(self, text):
         self.messages.put(("log", text))
 
-    def start(self, targets, confidence=0.8, window_name=DEFAULT_WINDOW_NAME, preview=False):
+    def start(self, targets, confidence=0.5, window_name=DEFAULT_WINDOW_NAME, preview=False):
         """
         Start gathering.
 
