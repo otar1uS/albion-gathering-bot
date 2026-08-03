@@ -19,6 +19,11 @@ with the work.
 .venv\Scripts\python.exe -m albion.record --name mylap     record a route, F9 to stop
 ```
 
+`--read-labels` reads the name the game writes on a node, which is where its tier and
+enchantment come from; `--min-tier`/`--max-tier`/`--only-enchanted` filter on it and turn
+the reader on by themselves. `--no-mount`, `--no-verify`, `--minutes`, `--debug` are the
+testing flags.
+
 Settings live in `config.json` (`albion/config.py` holds the defaults and the reasons).
 Everything printed also goes to `albion_bot.log`.
 
@@ -177,12 +182,10 @@ the side, everything configurable in it. Their Gather tab, for reference:
 
 **Achievable from pixels, roughly in order of value:**
 
-1. **Tier filtering.** The bot already hovers every node and the game prints its name.
-   OCR that label and the tier is exact: Rough/Birch/Chestnut/Pine/Cedar/Bloodoak/
-   Ashenbark for wood, and so on per resource. This makes the tier sliders real and is
-   the single best idea to take from their interface.
-2. **Enchanted detection.** Enchanted nodes glow and their name is coloured (green/blue/
-   purple/gold). Read the colour of the hover label from the same crop as the tier.
+1. ~~**Tier filtering.**~~ **Built** — see "Reading the node's name" below.
+2. ~~**Enchanted detection.**~~ **Built**, from the colour of the same hover label.
+   Never yet seen against a genuinely enchanted node, so the colours in
+   `game/tiers.ENCHANTMENT_COLOURS` are still nominal.
 3. Session statistics, hotkeys, save/load — the plumbing already exists.
 4. Auto reconnect — `__in_game` already detects it; add the login click sequence.
 5. Auto food — read the buff row; needs a template per food icon.
@@ -200,11 +203,70 @@ ESP/radar, and true world-coordinate pathfinding all come out of the packet stre
 off the screen. Screen reading can approximate the first two for the node under the
 cursor, and cannot do the rest. Say so plainly rather than promising parity.
 
+## Reading the node's name — tier and enchantment
+
+Built 2026-08-03, live-verified as far as noted. Two new files plus wiring:
+
+- `game/tiers.py` — the vocabulary. `NAMES` is tier → name per resource (wood 1 rough
+  logs … 8 whitewood logs, and so on; ore and fiber have no tier 1, which is why those
+  tables start at 2). `identify()` normalises what was read and fuzzy-matches it at
+  `CLOSENESS` 0.72, because OCR turns `l` into `1` often enough that an exact match
+  throws away good readings. `normalise()` splits before a capital: the tooltip is tight
+  and the engine returns `BirchLogs` as often as `Birch Logs`. `wanted()` applies the
+  rules; `restrictive()` answers whether the user actually asked for anything to be
+  skipped, which decides what an unreadable name means.
+- `vision/labels.py` — `LabelReader`, RapidOCR lazily loaded, cropping **at native
+  resolution** from `capture.grab()` rather than from the 640px model frame; measured
+  0.86 confidence and 616ms that way. Enchantment comes from the stroke colour of the
+  same crop.
+- Config gained `TierRule` (per resource, min/max) and `LabelConfig`; `Config.from_dict`
+  gained dict-of-dataclass handling to round-trip `tiers`. UI gained a min/max spinbox
+  per resource and the three checkboxes. CLI gained `--read-labels --min-tier --max-tier
+  --only-enchanted`, and any of the filters turns the reader on by itself.
+
+Verified live: `T2 Rugged Hide`, `T2 BirchLogs`.
+
+**Two facts found the hard way here, same class as the list above.**
+
+11. **OCR is the primary verification signal now, not the bright-pixel count.** The
+    first `--min-tier 4` run skipped nothing at all. The log said why: every node went
+    down the trust-click path with `+0 bright`, so `last_named` was never set and the
+    filter had nothing to filter on. Counting bright pixels says "scenery" for nodes
+    that then give up sixteen charges — the writing is drawn over whatever is behind it
+    and over pale ground it barely brightens anything. A name that matches the
+    vocabulary cannot be wrong in that direction. `verify.confirm` asks the reader
+    first, and the brightness only rescues an unreadable one.
+12. **Trust-click is disabled while a tier filter is set.** Clicking an unnamed node on
+    confidence alone is right when the user wants everything and wrong when they asked
+    for T5 and up — quietly ignoring the filter is the worse of the two mistakes. Both
+    halves are logged.
+
 ## Open work
+
+**Pick up here.** `Gatherer.__relocate()` and the one-shot retry in `__verify()` are
+written and syntax-checked but **have never been run**. They exist because a detection is
+already a second or so old by the time the cursor has travelled to it and the tooltip has
+had time to appear, and a fox does not wait: the hover lands on the grass it was standing
+on. That is the remaining `+0 bright, read as ''` population — nodes that yield charges
+anyway. Sync, then:
+
+```
+.venv\Scripts\python.exe -u -m albion --targets tree,hide --read-labels --minutes 6 --no-mount
+```
+
+and grep `albion_bot.log` for `read as|it is |skipping|took|charge`. Read the log file
+directly rather than grepping the console — a grep pattern hid the evidence twice. If the
+hover success rate rises, follow with a `--min-tier 4` run and confirm nodes are actually
+skipped.
+
+Then, in order:
 
 - Zone retrain: `training/autolabel.py collect` then `label`, fix boxes, retrain. This is
   the real fix for trees; nothing else moves that number much.
+- Tabbed single-window UI, session statistics, F5/F1 hotkeys — roadmap items 3 and 7.
 - `game/combat.py` has never been exercised against a real aggro.
-- Nothing is committed to git. The whole `albion/` package is untracked.
 - Client packaging (ONNX + onnxruntime + PyInstaller) — the venv is 1.4GB, far too big to
   hand a non-technical client.
+
+The whole `albion/` package is committed as of `c1358e9`, the relocate retry included.
+Remember the Windows copy does not update itself — sync before testing.
