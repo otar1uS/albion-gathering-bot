@@ -34,6 +34,47 @@ class WindowNotFound(Exception):
     """The game is not running, or is not called what the settings say."""
 
 
+def claim_real_pixels():
+    """
+    Ask Windows to stop lying about the size of things, before anything measures one.
+
+    A display at anything but 100% scaling reports two different sizes for the same
+    window, and which one a process is told depends on whether it has declared itself
+    aware of that. The machine this was found on runs 2560x1440 at 150%: the window is
+    2560 pixels wide, and an unaware process is told 1707. PrintWindow always hands back
+    the real 2560, so a rectangle measured while unaware and a picture taken at any time
+    disagree by half again, and every click lands a third of the way in from where it was
+    meant to.
+
+    The awful part is that it does not stay wrong. Something inside torch or pyautogui
+    declares awareness during import, so the rectangle read at startup was the small one
+    and every rectangle read afterwards was the real one. Declaring it here, before the
+    first measurement, is what makes the two agree for the whole run.
+
+    :return: True when the process is now measuring in real pixels.
+    """
+    if system() != "Windows":
+        return False
+
+    try:
+        # Per monitor aware, so a window dragged to a second screen at a different scale
+        # is still measured in that screen's own pixels.
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+
+        return True
+    except Exception:
+        pass
+
+    try:
+        # Older Windows, and the value already being set, both land here.
+        return bool(ctypes.windll.user32.SetProcessDPIAware())
+    except Exception:
+        log.warning("could not ask Windows for real pixel sizes. On a display scaled "
+                    "above 100%% every click will be out by that much.")
+
+        return False
+
+
 class Capture:
     """What the rest of the bot needs from a screenshot."""
 
@@ -75,6 +116,9 @@ class WindowsCapture(Capture):
 
     def __init__(self, config):
         super().__init__(config)
+
+        # Before the first GetWindowRect, never after it.
+        claim_real_pixels()
 
         import win32con
         import win32gui

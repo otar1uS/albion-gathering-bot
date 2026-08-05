@@ -409,15 +409,19 @@ class Gatherer:
         settings = self.config.gathering
         profile = self.target.profile
 
-        # The trunk rather than the box centre. The centre of a tall tree is canopy with
-        # gaps the ground shows through, and a click through one of those walks the
-        # character past the tree instead of to it.
+        # Two points, and they are not the same one. The click goes at the trunk, because
+        # the centre of a tall tree is canopy with gaps the ground shows through and a
+        # click through one of those walks the character past the tree. The box centre is
+        # what the next detection is matched against, since that is what the model
+        # reports. Following the node by its click point instead is what used to send the
+        # second charge at the canopy.
         spot = self.target.click
+        anchor = self.target.screen
 
         log.info("gathering the %s", profile)
 
         charges = 0
-        misses = 0
+        quiet = 0
 
         for attempt in range(settings.charge_attempts):
             if self.controller.stop_requested:
@@ -430,28 +434,48 @@ class Gatherer:
             # twenty seconds of standing still.
             arriving = profile.moving_timeout if attempt == 0 else settings.arrival_timeout
 
-            if not self.__take_charge(spot, profile, arriving):
-                break
+            if self.__take_charge(spot, profile, arriving):
+                charges += 1
+                quiet = 0
+                self.mount.note_gathered()
+            else:
+                # Watching the picture is a good test of having walked somewhere and a
+                # thin one for having swung an axe while standing still. Measured at one
+                # tree: walking moved the frame 11 to 14, an emptied clearing 0.85 to
+                # 1.0, and the gathering itself only 1.2 to 1.8, so whether a charge
+                # registers comes down to which side of the threshold an ambient frame
+                # happens to fall. The node still being on screen is the sounder signal
+                # and it is already being asked for below, so a quiet click is not
+                # counted and not acted on either. Only the first one is fatal, because
+                # nothing was reached at all, and lost_attempts of them in a row means
+                # the clicks are going somewhere that is not a node.
+                quiet += 1
 
-            charges += 1
-            self.mount.note_gathered()
+                if attempt == 0 or quiet >= settings.lost_attempts:
+                    break
+
             self.controller.wait(settings.charge_delay)
 
-            found = self.__find_again(spot, profile)
+            if attempt == 0:
+                # The first charge is the one that walks the character over, and the
+                # camera goes with it, so a node picked out 500px away has slid most of
+                # that distance across the screen by the time it is reached. Matched
+                # against where its box was before the walk it is always further away
+                # than track_radius allows, so it was never found again, the click point
+                # stayed where the node used to be, and every charge after the first
+                # walked the character back to an empty patch of ground. Measured on one
+                # tree: five charges, five full frame walks of 11 to 14 mean change
+                # against an idle 0.6, one of them the real one. Standing on the node,
+                # the node is wherever the character is.
+                anchor = self.detector.character()
+
+            found = self.__wait_for_node(anchor, profile)
 
             if found is None:
-                # Losing sight of a node is not the same as having emptied it. A tree
-                # keeps its shape until the last charge is out of it and the model drops
-                # a box here and there, so the last known spot is clicked again and the
-                # game settles it.
-                misses += 1
+                log.info("lost sight of the %s after %d charges", profile, charges)
+                break
 
-                if misses >= settings.lost_attempts:
-                    log.info("lost sight of the %s after %d charges", profile, charges)
-                    break
-            else:
-                misses = 0
-                spot = found
+            spot, anchor = found.click, found.screen
 
         if charges:
             self.charges += charges
@@ -510,6 +534,32 @@ class Gatherer:
         # there any more.
         return walked
 
+    def __wait_for_node(self, anchor, profile):
+        """
+        Look for the node again, giving the model a few frames to produce it.
+
+        Losing sight of a node is not the same as having emptied it: the model drops a box
+        every few frames and a tree keeps its shape until the last charge is out of it, so
+        one miss is looked at again rather than acted on. What is not done any more is
+        clicking where the node was last seen when it has not been seen since arriving.
+        That guess is what walked the character back across the clearing, and a look costs
+        160ms against the several seconds a wrong walk costs.
+
+        :param anchor: (x, y) on screen to search around.
+        :param profile: What is being looked for.
+        :return: The Detection, or None once lost_attempts looks have found nothing.
+        """
+        for _ in range(self.config.gathering.lost_attempts):
+            found = self.__find_again(anchor, profile)
+
+            if found is not None:
+                log.debug("the %s is still there, at %s", profile, found.screen)
+                return found
+
+            self.controller.wait(self.config.gathering.poll)
+
+        return None
+
     def __find_again(self, spot, profile):
         """
         Look for a node near where it was last seen.
@@ -519,9 +569,9 @@ class Gatherer:
         it at the same threshold lost it constantly. Only a box already close to where
         the character is standing is accepted this cheaply.
 
-        :param spot: (x, y) it was last seen at.
+        :param spot: (x, y) the box was centred on when it was last seen.
         :param profile: What is being looked for.
-        :return: (x, y) where it is now, None when it is not there.
+        :return: The Detection where it is now, None when it is not there.
         """
         detections, _ = self.__look(self.config.vision.tracking_factor)
         limit = self.capture.rect.width * self.config.gathering.track_radius
@@ -533,7 +583,7 @@ class Gatherer:
         if not near:
             return None
 
-        return min(near, key=lambda found: distance(spot, found.screen)).screen
+        return min(near, key=lambda found: distance(spot, found.screen))
 
     def __roam(self):
         """Cover new ground, along the recorded route when there is one."""

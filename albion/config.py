@@ -243,6 +243,35 @@ class NavigationConfig:
 
 
 @dataclass
+class MinimapConfig:
+    """Reading where the character is off the minimap."""
+
+    enabled: bool = True
+
+    # The minimap box, as fractions of the window. Fractions rather than pixels because
+    # this was measured on a 2560x1440 client and the client is whatever the user runs.
+    # Generous on purpose: the arrow is found by colour inside the box, so a box a little
+    # larger than the map costs nothing and a box a little smaller loses the character
+    # whenever it walks into the corner that was cut off.
+    left: float = 0.81
+    top: float = 0.68
+    right: float = 0.99
+    bottom: float = 0.92
+
+    # The character arrow in HSV. Measured off the live map: the arrow reads hue 104,
+    # saturation 158, value 255, and the water that shares its hue never gets near that
+    # brightness. Hue is on OpenCV's 0 to 179 scale, not degrees.
+    hue_low: int = 95
+    hue_high: int = 115
+    saturation: int = 110
+    value: int = 200
+
+    # Smallest blob that counts as the arrow. Measured: the arrow is 72 pixels and the
+    # largest speck of anything else passing the filter is 19.
+    smallest: int = 24
+
+
+@dataclass
 class AntiStuckConfig:
     """Noticing that nothing is happening any more."""
 
@@ -306,6 +335,7 @@ class Config:
     gathering: GatheringConfig = field(default_factory=GatheringConfig)
     verify: VerifyConfig = field(default_factory=VerifyConfig)
     navigation: NavigationConfig = field(default_factory=NavigationConfig)
+    minimap: MinimapConfig = field(default_factory=MinimapConfig)
     anti_stuck: AntiStuckConfig = field(default_factory=AntiStuckConfig)
     mount: MountConfig = field(default_factory=MountConfig)
     labels: LabelConfig = field(default_factory=LabelConfig)
