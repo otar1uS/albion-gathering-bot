@@ -11,3 +11,4 @@ __pycache__/
 datasets/
 training/roboflow_key.txt
 yolov5/runs/
+.aider*
