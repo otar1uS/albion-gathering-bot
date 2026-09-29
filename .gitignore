@@ -1,8 +1,4 @@
-output
-.venv
-roboflow.py
-.idea
-.DS_Store
+# Python
 __pycache__/
 
 # Training on this PC: the GPU virtualenv, the downloaded datasets and the Roboflow
@@ -12,3 +8,24 @@ datasets/
 training/roboflow_key.txt
 yolov5/runs/
 .aider*
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Editors and systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Built or recorded on each machine: settings, calibration, routes, models, datasets
+data/
+models/
+datasets/
+runs/
+*.pt
+*.onnx
+
+# Secrets never go in the repository
+.env*

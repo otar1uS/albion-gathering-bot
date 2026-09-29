@@ -1,10 +1,18 @@
+# Two bots live in this repository and share this file, see CLAUDE.md:
+#   albion/      the live-tested one, loads yolov5 weights through the yolov5 submodule
+#   albion_bot/  the rewrite, loads Ultralytics YOLO26 weights, runs them with OpenVINO
+#
+# torch comes from its own index, to get the build of your GPU:
+#   Intel Arc   pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu
+#   CPU only    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+
 # The pin used to be 4.9.0.80, dropped because no wheel is built for it on recent
 # Python versions and building OpenCV from source takes hours.
 opencv-python>=4.9
 mss
 numpy
-torch
-torchvision
 
 # Mouse and keyboard.
 # Windows, macOS and Linux running X11 are driven through pyautogui. A Wayland
@@ -16,15 +24,16 @@ pyautogui
 # its own when the session is X11.
 python-xlib; sys_platform == "linux"
 
-# Route recording: watches the real mouse while the user walks the lap they want
-# farmed, so their own clicks become the waypoints.
+# Route recording in albion/: watches the real mouse while the user walks the lap they
+# want farmed, so their own clicks become the waypoints.
 pynput
 
-# Window capture, one library per platform
+# Window capture, one library per platform. albion_bot/ needs none on Windows, it goes
+# through ctypes.
 pywin32; sys_platform == "win32"
 pyobjc-framework-Quartz; sys_platform == "darwin"
 
-# Needed by the yolov5 submodule loading the model
+# Needed by the yolov5 submodule loading the model of albion/
 pandas
 Pillow
 psutil
@@ -34,4 +43,7 @@ scipy
 seaborn
 matplotlib
 tqdm
-ultralytics
+
+# Detection and training of albion_bot/, and its fast inference on Intel GPUs.
+ultralytics>=8.4.165
+openvino>=2026.4

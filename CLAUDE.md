@@ -270,3 +270,74 @@ Then, in order:
 
 The whole `albion/` package is committed as of `c1358e9`, the relocate retry included.
 Remember the Windows copy does not update itself — sync before testing.
+
+---
+
+## `albion_bot/`: a second bot, written 2026-09-29 away from the game
+
+On 2026-09-29 a separate Linux checkout that had never pulled the August work above got a
+full rewrite into a new package, `albion_bot/` (with `tests/`, `tools/`, `scripts/`,
+`start.bat`, and its own README in `albion_bot/README.md`). The two histories met in a merge;
+nothing of either side was dropped. **`albion/` stays the bot that works.** `albion_bot/` has
+passed 66 tests against a simulated game (`tests/fake_game.py`) and has **never touched the
+real one**.
+
+### Where it contradicts the hard-won facts above: the facts win
+
+- **Gathering signal.** `albion_bot/vision/gather_bar.py` template-matches the gathering bar,
+  with a box the user draws and matching tolerant to window size. Fact 10 says this approach is
+  dead (zoom changes, the character's nameplate swamps it). Motion differencing is what works.
+- **Minimap.** `albion_bot/navigation/route.py` assumes the minimap *scrolls* under an arrow
+  fixed in its centre, and records routes as minimap patches. `albion/nav/minimap.py`, measured
+  live, finds a *moving* arrow on a *fixed* minimap. If that is right, `albion_bot`'s routes do
+  not work as designed.
+- **Capture.** `albion_bot` grabs the screen (mss) and minimizes its own window. `albion` uses
+  PrintWindow, measured at 2.4% black under a covering window against 41.5% for screen grabs.
+- **Scenery trees.** `albion_bot` has no hover or OCR verification (facts 6, 7, 11), so it
+  would click decorative trees.
+- **Model format.** `albion_bot` loads Ultralytics weights (YOLO26, OpenVINO export).
+  `best_merged.pt` is a yolov5 checkpoint and **cannot** be loaded by it. Trying it live means
+  retraining with `tools/train.py`.
+
+### What in it is worth taking into `albion/`, most valuable first
+
+1. **Camera-tracking memory: the fix for a real bug in `albion/`.** `Gatherer.__ignore`
+   stores *screen* positions and never moves them, but the camera follows the character, so
+   after any walk every ignored spot points at the wrong place. The bot can walk back to
+   emptied nodes and skip live ones that slid under an old spot. `albion_bot/vision/tracking.py`
+   (`camera_shift`, phase correlation over the middle of the frame with the character painted
+   out) measures the world's slide between two frames to sub-pixel precision up to ~500px.
+   `albion_bot/bot/memory.py` shifts the remembered spots with it. The lesson that cost a bug:
+   **measure between every pair of consecutive frames and add the steps up.** One jump across
+   half a screen aliases and put a node 750px off. It fits next to `Motion` (fact 5: each
+   frame still enters `Motion` exactly once). Port it, then check it live with a saved frame
+   and the ignored spots drawn on it.
+2. **The simulator** (`tests/fake_game.py`): a scrolling world, nodes with charges, stumps the
+   model still detects, and simulated time. It is how the memory bug above was found and
+   proven fixed (40 random layouts, zero clicks on stumps). `albion` has no unit tests; a copy
+   adapted to `Gatherer` would catch regressions without the game.
+3. **Walk clicks that avoid boxes** (`Bot.walk_point`/`near_box` in `albion_bot/bot/engine.py`):
+   route and roam clicks are turned aside when they would land on a node or monster, which
+   would otherwise start a gather or an attack.
+4. **An Ultralytics/OpenVINO model on the Arc.** Only as a measured comparison with
+   `training/compare_models.py`, never on faith: fact 4 (augmented inference) and the tree
+   thresholds were tuned on yolov5.
+
+Do **not** take: the bar template, the mss capture, or the scrolling-minimap routes.
+
+## Next session on Windows: start here
+
+1. Pull, then sync the Windows copy (see "Two copies of the repository" above). The yolov5
+   submodule is unchanged.
+2. Carry on with **Open work** above: the never-run `__relocate()` retry. That is the
+   established next step.
+3. Then port item 1 of the list above (camera-tracking memory) into `albion/bot/gatherer.py`,
+   verify it with saved frames, and run a timed session comparing charges per hour and
+   re-clicks on emptied nodes before and after.
+4. Decide with the user what happens to `albion_bot/`: mine it for parts (recommended) or
+   delete it. Keeping two bots long-term costs more than it gives.
+
+**Do not run `scripts\setup_windows.ps1` in the working `.venv`.** It installs the `xpu` torch build and newer packages into `.venv`, which is the environment `albion/` runs from. Give it its own folder first, or install by hand.
+
+`albion_bot/` tests: `.venv\Scripts\python -m pytest -q tests`. They need `ultralytics`,
+`opencv-python` and `numpy`, all already in `requirements.txt`. None of them need the game.

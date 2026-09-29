@@ -93,3 +93,10 @@ The previous implementation lives on in `Application/` until the new one has ear
 keep. This project began as a fork of
 [Michelprogram/albion-gathering-bot](https://github.com/Michelprogram/albion-gathering-bot);
 the detection idea and the yolov5 submodule arrangement come from there.
+
+## The experimental rewrite, `albion_bot/`
+
+A second, separate bot lives in `albion_bot/`. It was written away from the game and has only
+run against a simulated one (`tests/`), never the real one. `albion/` above is the one that works.
+Its README is [albion_bot/README.md](albion_bot/README.md), and CLAUDE.md explains how the two
+compare and what is worth taking from it.
